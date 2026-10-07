@@ -29,6 +29,7 @@
     }
 
     .box {
+      width: 100%;
       max-width: 500px;
       margin: 15px auto;
       padding: 18px;
@@ -72,6 +73,7 @@
 
     button:disabled {
       background: #aaa;
+      cursor: not-allowed;
     }
 
     #message {
@@ -87,6 +89,10 @@
     .error {
       color: red;
     }
+
+    .info {
+      color: #555;
+    }
   </style>
 </head>
 
@@ -98,7 +104,7 @@
 
   <div class="box">
 
-    <label>LPN</label>
+    <label for="lpn">LPN</label>
 
     <input
       type="text"
@@ -107,28 +113,31 @@
       readonly
     >
 
-    <label>System Quantity</label>
+    <label for="systemQty">System Quantity</label>
 
     <input
       type="number"
       id="systemQty"
       placeholder="Enter system quantity"
       min="0"
+      step="1"
       inputmode="numeric"
     >
 
-    <label>Physical Quantity</label>
+    <label for="physicalQty">Physical Quantity</label>
 
     <input
       type="number"
       id="physicalQty"
       placeholder="Enter physical quantity"
       min="0"
+      step="1"
       inputmode="numeric"
     >
 
     <button
       id="saveButton"
+      type="button"
       onclick="saveData()"
       disabled
     >
@@ -137,24 +146,48 @@
 
   </div>
 
-  <div id="message">
+  <div id="message" class="info">
     Scan an LPN QR code to begin.
   </div>
 
 
   <script>
 
+    // ==================================================
+    // GOOGLE APPS SCRIPT BACKEND
+    // ==================================================
+
     const scriptURL =
       "https://script.google.com/macros/s/AKfycbyQymQIwRzS01s264FD5AKOQOVmAAwWSb-ER9nhiJUi0YtVzMfAmwGBnYTPjKtw_LH8XQ/exec";
 
-    let scannedLPN = "";
+
+    // ==================================================
+    // GLOBAL VARIABLES
+    // ==================================================
+
     let scanner = null;
+    let scannedLPN = "";
     let scanLocked = false;
 
 
-    // ================================
-    // START SCANNER
-    // ================================
+    // ==================================================
+    // MESSAGE HELPER
+    // ==================================================
+
+    function setMessage(text, type) {
+
+      const message =
+        document.getElementById("message");
+
+      message.innerText = text;
+
+      message.className = type || "info";
+    }
+
+
+    // ==================================================
+    // START QR SCANNER
+    // ==================================================
 
     function startScanner() {
 
@@ -179,12 +212,13 @@
     }
 
 
-    // ================================
-    // QR SCANNED
-    // ================================
+    // ==================================================
+    // QR SCAN SUCCESS
+    // ==================================================
 
     function onScanSuccess(decodedText) {
 
+      // Prevent repeated scans
       if (scanLocked) {
         return;
       }
@@ -193,27 +227,35 @@
 
       scannedLPN = decodedText;
 
+      // Put LPN into field
       document.getElementById("lpn").value =
         decodedText;
 
-      document.getElementById("message").innerText =
-        "LPN captured. Enter quantities.";
-
-      document.getElementById("message").className = "";
-
+      // Enable save
       document.getElementById("saveButton").disabled =
         false;
 
+      setMessage(
+        "LPN captured. Enter quantities.",
+        "info"
+      );
 
+
+      // Stop scanner
       if (scanner) {
 
-        scanner.clear().catch(function(error) {
-          console.log(error);
-        });
+        scanner.clear()
+          .catch(function(error) {
+            console.log(
+              "Scanner clear error:",
+              error
+            );
+          });
 
       }
 
 
+      // Focus System Quantity
       setTimeout(function() {
 
         document
@@ -224,35 +266,49 @@
     }
 
 
+    // ==================================================
+    // QR SCAN FAILURE
+    // ==================================================
+
     function onScanFailure(error) {
-      // Ignore normal scanning failures
+      // Normal scanning failures are ignored.
     }
 
 
-    // Start scanner
-    startScanner();
+    // ==================================================
+    // SAVE AUDIT
+    // ==================================================
 
-
-    // ================================
-    // SAVE DATA
-    // ================================
-
-    async function saveData() {
+    function saveData() {
 
       const lpn =
-        document.getElementById("lpn").value.trim();
+        document
+          .getElementById("lpn")
+          .value
+          .trim();
 
       const systemQty =
-        document.getElementById("systemQty").value;
+        document
+          .getElementById("systemQty")
+          .value
+          .trim();
 
       const physicalQty =
-        document.getElementById("physicalQty").value;
+        document
+          .getElementById("physicalQty")
+          .value
+          .trim();
 
+
+      // ------------------------------------------
+      // VALIDATION
+      // ------------------------------------------
 
       if (!lpn) {
 
-        showError(
-          "Please scan an LPN."
+        setMessage(
+          "Please scan an LPN.",
+          "error"
         );
 
         return;
@@ -261,8 +317,9 @@
 
       if (systemQty === "") {
 
-        showError(
-          "Please enter System Quantity."
+        setMessage(
+          "Please enter System Quantity.",
+          "error"
         );
 
         document
@@ -275,8 +332,9 @@
 
       if (physicalQty === "") {
 
-        showError(
-          "Please enter Physical Quantity."
+        setMessage(
+          "Please enter Physical Quantity.",
+          "error"
         );
 
         document
@@ -287,28 +345,124 @@
       }
 
 
-      // Disable SAVE to prevent double submission
+      // ------------------------------------------
+      // PREVENT DOUBLE CLICK
+      // ------------------------------------------
 
-      document
-        .getElementById("saveButton")
-        .disabled = true;
+      const saveButton =
+        document.getElementById("saveButton");
 
+      saveButton.disabled = true;
 
-      document
-        .getElementById("message")
-        .innerText = "Saving...";
-
-
-      document
-        .getElementById("message")
-        .className = "";
+      setMessage(
+        "Saving...",
+        "info"
+      );
 
 
-      // ================================
-      // BUILD REQUEST
-      // ================================
+      // ------------------------------------------
+      // CREATE UNIQUE JSONP CALLBACK
+      // ------------------------------------------
 
-      const url =
+      const callbackName =
+        "lpnAuditCallback_" +
+        Date.now();
+
+
+      // ------------------------------------------
+      // CALLBACK FUNCTION
+      // ------------------------------------------
+
+      window[callbackName] =
+        function(response) {
+
+          console.log(
+            "Apps Script response:",
+            response
+          );
+
+
+          if (
+            response &&
+            response.success === true
+          ) {
+
+            setMessage(
+              "✅ Saved! Ready for next LPN.",
+              "success"
+            );
+
+
+            // Clear fields
+            document
+              .getElementById("lpn")
+              .value = "";
+
+            document
+              .getElementById("systemQty")
+              .value = "";
+
+            document
+              .getElementById("physicalQty")
+              .value = "";
+
+
+            scannedLPN = "";
+
+
+            // Remove JSONP request
+            if (jsonpScript) {
+
+              jsonpScript.remove();
+
+              jsonpScript = null;
+            }
+
+
+            // Remove callback
+            delete window[callbackName];
+
+
+            // Restart scanner
+            setTimeout(function() {
+
+              document
+                .getElementById("reader")
+                .innerHTML = "";
+
+              saveButton.disabled = true;
+
+              startScanner();
+
+            }, 300);
+
+
+          } else {
+
+            setMessage(
+              "Google Sheet rejected the save.",
+              "error"
+            );
+
+            saveButton.disabled = false;
+
+            delete window[callbackName];
+
+            if (jsonpScript) {
+
+              jsonpScript.remove();
+
+              jsonpScript = null;
+            }
+          }
+        };
+
+
+      // ------------------------------------------
+      // BUILD REQUEST URL
+      // ------------------------------------------
+
+      const requestURL =
         scriptURL +
         "?action=save" +
         "&lpn=" +
@@ -316,110 +470,73 @@
         "&systemQty=" +
         encodeURIComponent(systemQty) +
         "&physicalQty=" +
-        encodeURIComponent(physicalQty);
+        encodeURIComponent(physicalQty) +
+        "&callback=" +
+        encodeURIComponent(callbackName);
 
 
-      try {
+      console.log(
+        "Sending to Apps Script:",
+        requestURL
+      );
 
-        /*
-         * no-cors is intentional.
-         *
-         * The browser sends the request to Apps Script,
-         * but does not try to read or display Google's
-         * response.
-         */
 
-        await fetch(
-          url,
-          {
-            method: "GET",
-            mode: "no-cors"
+      // ------------------------------------------
+      // JSONP SCRIPT REQUEST
+      // ------------------------------------------
+
+      var jsonpScript =
+        document.createElement("script");
+
+      jsonpScript.src = requestURL;
+
+      jsonpScript.async = true;
+
+
+      // ------------------------------------------
+      // REQUEST ERROR
+      // ------------------------------------------
+
+      jsonpScript.onerror =
+        function() {
+
+          console.error(
+            "JSONP request failed."
+          );
+
+          setMessage(
+            "❌ Could not connect to Google Sheet.",
+            "error"
+          );
+
+          saveButton.disabled = false;
+
+          delete window[callbackName];
+
+          if (jsonpScript) {
+
+            jsonpScript.remove();
+
+            jsonpScript = null;
           }
-        );
+        };
 
 
-        // Give Apps Script a moment to write the row
+      // ------------------------------------------
+      // SEND REQUEST
+      // ------------------------------------------
 
-        await new Promise(function(resolve) {
-
-          setTimeout(resolve, 1200);
-
-        });
-
-
-        document
-          .getElementById("message")
-          .innerText =
-          "✅ Saved! Ready for next LPN.";
-
-        document
-          .getElementById("message")
-          .className = "success";
-
-
-        // Clear everything
-
-        document
-          .getElementById("lpn")
-          .value = "";
-
-        document
-          .getElementById("systemQty")
-          .value = "";
-
-        document
-          .getElementById("physicalQty")
-          .value = "";
-
-
-        scannedLPN = "";
-
-
-        // Reset button
-
-        document
-          .getElementById("saveButton")
-          .disabled = true;
-
-
-        // Restart scanner
-
-        document
-          .getElementById("reader")
-          .innerHTML = "";
-
-        startScanner();
-
-
-      } catch (error) {
-
-        console.error(error);
-
-        showError(
-          "Could not send the LPN. Please try again."
-        );
-
-        document
-          .getElementById("saveButton")
-          .disabled = false;
-      }
+      document
+        .body
+        .appendChild(jsonpScript);
     }
 
 
-    // ================================
-    // ERROR MESSAGE
-    // ================================
+    // ==================================================
+    // START APPLICATION
+    // ==================================================
 
-    function showError(message) {
-
-      document
-        .getElementById("message")
-        .innerText = message;
-
-      document
-        .getElementById("message")
-        .className = "error";
-    }
+    startScanner();
 
   </script>
 
