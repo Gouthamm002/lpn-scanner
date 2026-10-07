@@ -87,10 +87,6 @@
     .error {
       color: red;
     }
-
-    #sender {
-      display: none;
-    }
   </style>
 </head>
 
@@ -145,27 +141,20 @@
     Scan an LPN QR code to begin.
   </div>
 
-  <!-- Hidden destination for Apps Script -->
-  <iframe
-    id="sender"
-    name="sender"
-  ></iframe>
-
 
   <script>
 
     const scriptURL =
       "https://script.google.com/macros/s/AKfycbyQymQIwRzS01s264FD5AKOQOVmAAwWSb-ER9nhiJUi0YtVzMfAmwGBnYTPjKtw_LH8XQ/exec";
 
-
     let scannedLPN = "";
     let scanner = null;
     let scanLocked = false;
 
 
-    // -------------------------------
+    // ================================
     // START SCANNER
-    // -------------------------------
+    // ================================
 
     function startScanner() {
 
@@ -190,9 +179,9 @@
     }
 
 
-    // -------------------------------
+    // ================================
     // QR SCANNED
-    // -------------------------------
+    // ================================
 
     function onScanSuccess(decodedText) {
 
@@ -204,43 +193,51 @@
 
       scannedLPN = decodedText;
 
-      document.getElementById("lpn").value = decodedText;
+      document.getElementById("lpn").value =
+        decodedText;
 
       document.getElementById("message").innerText =
         "LPN captured. Enter quantities.";
 
       document.getElementById("message").className = "";
 
-      document.getElementById("saveButton").disabled = false;
+      document.getElementById("saveButton").disabled =
+        false;
 
-      // Stop scanner while entering quantities
+
       if (scanner) {
+
         scanner.clear().catch(function(error) {
           console.log(error);
         });
+
       }
 
-      // Automatically focus System Quantity
+
       setTimeout(function() {
-        document.getElementById("systemQty").focus();
+
+        document
+          .getElementById("systemQty")
+          .focus();
+
       }, 300);
     }
 
 
     function onScanFailure(error) {
-      // Normal QR scanning failures are ignored
+      // Ignore normal scanning failures
     }
 
 
-    // Start scanner when page loads
+    // Start scanner
     startScanner();
 
 
-    // -------------------------------
-    // SAVE
-    // -------------------------------
+    // ================================
+    // SAVE DATA
+    // ================================
 
-    function saveData() {
+    async function saveData() {
 
       const lpn =
         document.getElementById("lpn").value.trim();
@@ -253,134 +250,175 @@
 
 
       if (!lpn) {
-        showError("Please scan an LPN.");
+
+        showError(
+          "Please scan an LPN."
+        );
+
         return;
       }
 
 
       if (systemQty === "") {
-        showError("Please enter System Quantity.");
-        document.getElementById("systemQty").focus();
+
+        showError(
+          "Please enter System Quantity."
+        );
+
+        document
+          .getElementById("systemQty")
+          .focus();
+
         return;
       }
 
 
       if (physicalQty === "") {
-        showError("Please enter Physical Quantity.");
-        document.getElementById("physicalQty").focus();
+
+        showError(
+          "Please enter Physical Quantity."
+        );
+
+        document
+          .getElementById("physicalQty")
+          .focus();
+
         return;
       }
 
 
-      // Disable button to prevent duplicate submissions
-      document.getElementById("saveButton").disabled = true;
+      // Disable SAVE to prevent double submission
 
-      document.getElementById("message").innerText =
-        "Saving...";
-
-      document.getElementById("message").className = "";
+      document
+        .getElementById("saveButton")
+        .disabled = true;
 
 
-      // --------------------------------
-      // Create hidden form
-      // --------------------------------
-
-      const form = document.createElement("form");
-
-      form.method = "GET";
-
-      form.action = scriptURL;
-
-      form.target = "sender";
+      document
+        .getElementById("message")
+        .innerText = "Saving...";
 
 
-      // action=save
-      addField(form, "action", "save");
-
-      // LPN
-      addField(form, "lpn", lpn);
-
-      // System Quantity
-      addField(form, "systemQty", systemQty);
-
-      // Physical Quantity
-      addField(form, "physicalQty", physicalQty);
+      document
+        .getElementById("message")
+        .className = "";
 
 
-      document.body.appendChild(form);
+      // ================================
+      // BUILD REQUEST
+      // ================================
 
-      form.submit();
+      const url =
+        scriptURL +
+        "?action=save" +
+        "&lpn=" +
+        encodeURIComponent(lpn) +
+        "&systemQty=" +
+        encodeURIComponent(systemQty) +
+        "&physicalQty=" +
+        encodeURIComponent(physicalQty);
 
 
-      // Remove temporary form
-      setTimeout(function() {
-        form.remove();
-      }, 1000);
+      try {
+
+        /*
+         * no-cors is intentional.
+         *
+         * The browser sends the request to Apps Script,
+         * but does not try to read or display Google's
+         * response.
+         */
+
+        await fetch(
+          url,
+          {
+            method: "GET",
+            mode: "no-cors"
+          }
+        );
 
 
-      // --------------------------------
-      // Reset app
-      // --------------------------------
+        // Give Apps Script a moment to write the row
 
-      setTimeout(function() {
+        await new Promise(function(resolve) {
 
-        document.getElementById("message").innerText =
+          setTimeout(resolve, 1200);
+
+        });
+
+
+        document
+          .getElementById("message")
+          .innerText =
           "✅ Saved! Ready for next LPN.";
 
-        document.getElementById("message").className =
-          "success";
+        document
+          .getElementById("message")
+          .className = "success";
 
 
-        document.getElementById("lpn").value = "";
+        // Clear everything
 
-        document.getElementById("systemQty").value = "";
+        document
+          .getElementById("lpn")
+          .value = "";
 
-        document.getElementById("physicalQty").value = "";
+        document
+          .getElementById("systemQty")
+          .value = "";
+
+        document
+          .getElementById("physicalQty")
+          .value = "";
 
 
         scannedLPN = "";
 
-        document.getElementById("saveButton").disabled = true;
+
+        // Reset button
+
+        document
+          .getElementById("saveButton")
+          .disabled = true;
 
 
-        // Start scanner again
-        document.getElementById("reader").innerHTML = "";
+        // Restart scanner
+
+        document
+          .getElementById("reader")
+          .innerHTML = "";
 
         startScanner();
 
-      }, 1200);
+
+      } catch (error) {
+
+        console.error(error);
+
+        showError(
+          "Could not send the LPN. Please try again."
+        );
+
+        document
+          .getElementById("saveButton")
+          .disabled = false;
+      }
     }
 
 
-    // -------------------------------
-    // FORM FIELD HELPER
-    // -------------------------------
-
-    function addField(form, name, value) {
-
-      const input = document.createElement("input");
-
-      input.type = "hidden";
-
-      input.name = name;
-
-      input.value = value;
-
-      form.appendChild(input);
-    }
-
-
-    // -------------------------------
-    // MESSAGES
-    // -------------------------------
+    // ================================
+    // ERROR MESSAGE
+    // ================================
 
     function showError(message) {
 
-      document.getElementById("message").innerText =
-        message;
+      document
+        .getElementById("message")
+        .innerText = message;
 
-      document.getElementById("message").className =
-        "error";
+      document
+        .getElementById("message")
+        .className = "error";
     }
 
   </script>
