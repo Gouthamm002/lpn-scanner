@@ -61,21 +61,59 @@
   </div>
 
   <script>
+
+    // Prevent the same QR code from being saved repeatedly
+    let lastScanned = "";
+
     function onScanSuccess(decodedText) {
 
+      // Ignore repeated scans of the same LPN
+      if (decodedText === lastScanned) {
+        return;
+      }
+
+      lastScanned = decodedText;
+
+      // Show scanned LPN
       document.getElementById("result").innerText = decodedText;
 
       document.getElementById("message").innerText =
-        "LPN detected!";
+        "LPN detected! Saving...";
 
-      // We will connect this to Google Sheets later.
+      // Your Zepto Apps Script Web App
+      const scriptURL =
+        "https://script.google.com/a/macros/zepto.com/s/AKfycbw-3Ji-pL5o0klWYeaSk1C1raQWlS8q-UtM1KYxRtVf4RIW-9K9qqNMv_gKsAjYXSRW/exec";
+
+      // Send LPN to Apps Script
+      const request = new Image();
+
+      request.onload = function() {
+
+        document.getElementById("message").innerText =
+          "✅ LPN saved to Google Sheet!";
+
+      };
+
+      request.onerror = function() {
+
+        document.getElementById("message").innerText =
+          "⚠️ LPN detected, but could not confirm saving.";
+
+      };
+
+      request.src =
+        scriptURL + "?lpn=" + encodeURIComponent(decodedText);
+
       console.log("LPN:", decodedText);
     }
+
 
     function onScanFailure(error) {
       // Keep scanning
     }
 
+
+    // Start QR scanner
     const scanner = new Html5QrcodeScanner(
       "reader",
       {
@@ -89,6 +127,7 @@
     );
 
     scanner.render(onScanSuccess, onScanFailure);
+
   </script>
 
 </body>
