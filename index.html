@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LPN Scanner</title>
+  <title>LPN Audit</title>
 
   <script src="https://unpkg.com/html5-qrcode"></script>
 
@@ -10,95 +10,167 @@
     body {
       font-family: Arial, sans-serif;
       margin: 0;
-      padding: 20px;
+      padding: 15px;
       background: #f5f5f5;
       text-align: center;
     }
 
     h2 {
-      margin-top: 10px;
+      margin: 10px 0 20px;
     }
 
     #reader {
       width: 100%;
       max-width: 500px;
-      margin: 20px auto;
+      margin: auto;
       background: white;
       border-radius: 12px;
       overflow: hidden;
     }
 
-    #result {
-      margin: 20px auto;
+    .box {
+      max-width: 500px;
+      margin: 15px auto;
       padding: 15px;
       background: white;
-      border-radius: 10px;
-      max-width: 500px;
-      font-size: 20px;
+      border-radius: 12px;
+      box-sizing: border-box;
+    }
+
+    label {
+      display: block;
+      text-align: left;
       font-weight: bold;
-      word-break: break-all;
+      margin-bottom: 6px;
+    }
+
+    input {
+      width: 100%;
+      padding: 13px;
+      font-size: 18px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+
+    #lpn {
+      background: #f0f0f0;
+    }
+
+    button {
+      width: 100%;
+      padding: 15px;
+      font-size: 18px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: #222;
+      color: white;
+    }
+
+    button:disabled {
+      background: #aaa;
     }
 
     #message {
-      margin: 15px;
-      color: #555;
+      margin: 15px auto;
+      max-width: 500px;
+      font-weight: bold;
+    }
+
+    .hidden {
+      display: none;
     }
   </style>
 </head>
 
 <body>
 
-  <h2>📦 LPN Scanner</h2>
+  <h2>📦 LPN Audit</h2>
 
   <div id="reader"></div>
 
-  <div id="result">
-    Scan an LPN QR code
+  <div class="box">
+    <label>LPN</label>
+
+    <input
+      type="text"
+      id="lpn"
+      placeholder="Scan QR code"
+      readonly
+    >
+
+    <label>System Quantity</label>
+
+    <input
+      type="number"
+      id="systemQty"
+      placeholder="Enter system quantity"
+      min="0"
+    >
+
+    <label>Physical Quantity</label>
+
+    <input
+      type="number"
+      id="physicalQty"
+      placeholder="Enter physical quantity"
+      min="0"
+    >
+
+    <button id="saveButton" onclick="saveData()" disabled>
+      SAVE
+    </button>
   </div>
 
   <div id="message">
-    Camera will start when the page loads.
+    Scan an LPN QR code to begin.
   </div>
+
 
   <script>
 
     const scriptURL =
       "https://script.google.com/macros/s/AKfycbyQymQIwRzS01s264FD5AKOQOVmAAwWSb-ER9nhiJUi0YtVzMfAmwGBnYTPjKtw_LH8XQ/exec";
 
-    let lastScanned = "";
+
+    let scannedLPN = "";
+
 
     function onScanSuccess(decodedText) {
 
-      // Prevent the same QR from being scanned repeatedly
-      if (decodedText === lastScanned) {
+      // Ignore repeated scans of the same QR
+      if (decodedText === scannedLPN) {
         return;
       }
 
-      lastScanned = decodedText;
+      scannedLPN = decodedText;
 
-      // Display scanned LPN
-      document.getElementById("result").innerText = decodedText;
+      document.getElementById("lpn").value = decodedText;
 
       document.getElementById("message").innerText =
-        "LPN detected! Saving...";
+        "LPN captured. Enter quantities.";
 
-      // Create Apps Script URL
-      const url =
-        scriptURL + "?lpn=" + encodeURIComponent(decodedText);
+      document.getElementById("saveButton").disabled = false;
 
-      // Diagnostic test:
-      // Open Apps Script directly
-      window.open(url, "_blank");
+      // Stop scanner after successful scan
+      try {
+        scanner.clear();
+      } catch (e) {
+        console.log(e);
+      }
 
-      setTimeout(function() {
-        document.getElementById("message").innerText =
-          "✅ LPN sent to Google Sheet!";
-      }, 1000);
+      // Put cursor in System Quantity
+      document.getElementById("systemQty").focus();
     }
+
 
     function onScanFailure(error) {
       // Ignore normal scanning failures
     }
+
 
     const scanner = new Html5QrcodeScanner(
       "reader",
@@ -112,10 +184,70 @@
       false
     );
 
+
     scanner.render(
       onScanSuccess,
       onScanFailure
     );
+
+
+    function saveData() {
+
+      const lpn =
+        document.getElementById("lpn").value.trim();
+
+      const systemQty =
+        document.getElementById("systemQty").value;
+
+      const physicalQty =
+        document.getElementById("physicalQty").value;
+
+
+      if (!lpn) {
+        alert("Please scan an LPN.");
+        return;
+      }
+
+      if (systemQty === "" || physicalQty === "") {
+        alert("Please enter both quantities.");
+        return;
+      }
+
+
+      const url =
+        scriptURL +
+        "?action=save" +
+        "&lpn=" + encodeURIComponent(lpn) +
+        "&systemQty=" + encodeURIComponent(systemQty) +
+        "&physicalQty=" + encodeURIComponent(physicalQty);
+
+
+      document.getElementById("message").innerText =
+        "Saving...";
+
+
+      // Open the Apps Script request directly.
+      // This is intentionally a button action so the browser
+      // allows the navigation.
+      window.open(url, "_blank");
+
+
+      setTimeout(function() {
+
+        document.getElementById("message").innerText =
+          "✅ Saved. Ready for next LPN.";
+
+        // Clear fields
+        document.getElementById("lpn").value = "";
+        document.getElementById("systemQty").value = "";
+        document.getElementById("physicalQty").value = "";
+
+        scannedLPN = "";
+
+        document.getElementById("saveButton").disabled = true;
+
+      }, 1000);
+    }
 
   </script>
 
