@@ -155,6 +155,7 @@
     const scriptURL =
       "https://script.google.com/macros/s/AKfycbyQymQIwRzS01s264FD5AKOQOVmAAwWSb-ER9nhiJUi0YtVzMfAmwGBnYTPjKtw_LH8XQ/exec";
 
+
     let scanner = null;
     let scannedLPN = "";
     let scanLocked = false;
@@ -223,6 +224,7 @@
             console.log(error);
           }
         );
+
       }
 
 
@@ -239,7 +241,7 @@
     function onScanFailure(error) {}
 
 
-    function saveData() {
+    async function saveData() {
 
       const lpn =
         document
@@ -304,83 +306,6 @@
       );
 
 
-      const callbackName =
-        "lpnSaved_" + Date.now();
-
-
-      window[callbackName] =
-        function(response) {
-
-          if (
-            response &&
-            response.success === true
-          ) {
-
-            document.getElementById(
-              "message"
-            ).innerText =
-              "✅ Saved! Ready for next LPN.";
-
-            document.getElementById(
-              "message"
-            ).className =
-              "success";
-
-
-            document.getElementById(
-              "lpn"
-            ).value = "";
-
-            document.getElementById(
-              "systemQty"
-            ).value = "";
-
-            document.getElementById(
-              "physicalQty"
-            ).value = "";
-
-            scannedLPN = "";
-
-
-            document.getElementById(
-              "saveButton"
-            ).disabled = true;
-
-
-            delete window[callbackName];
-
-            script.remove();
-
-
-            setTimeout(function() {
-
-              document.getElementById(
-                "reader"
-              ).innerHTML = "";
-
-              startScanner();
-
-            }, 300);
-
-
-          } else {
-
-            setMessage(
-              "Save failed. Please try again.",
-              "error"
-            );
-
-            document.getElementById(
-              "saveButton"
-            ).disabled = false;
-
-            delete window[callbackName];
-
-            script.remove();
-          }
-        };
-
-
       const url =
         scriptURL +
         "?action=save" +
@@ -389,20 +314,75 @@
         "&systemQty=" +
         encodeURIComponent(systemQty) +
         "&physicalQty=" +
-        encodeURIComponent(physicalQty) +
-        "&callback=" +
-        encodeURIComponent(callbackName);
+        encodeURIComponent(physicalQty);
 
 
-      const script =
-        document.createElement("script");
+      try {
+
+        await fetch(
+          url,
+          {
+            method: "GET",
+            mode: "no-cors",
+            cache: "no-store"
+          }
+        );
 
 
-      script.src = url;
-      script.async = true;
+        document.getElementById(
+          "message"
+        ).innerText =
+          "✅ Saved! Ready for next LPN.";
+
+        document.getElementById(
+          "message"
+        ).className =
+          "success";
 
 
-      document.body.appendChild(script);
+        document.getElementById(
+          "lpn"
+        ).value = "";
+
+        document.getElementById(
+          "systemQty"
+        ).value = "";
+
+        document.getElementById(
+          "physicalQty"
+        ).value = "";
+
+        scannedLPN = "";
+
+        document.getElementById(
+          "saveButton"
+        ).disabled = true;
+
+
+        setTimeout(function() {
+
+          document.getElementById(
+            "reader"
+          ).innerHTML = "";
+
+          startScanner();
+
+        }, 300);
+
+
+      } catch (error) {
+
+        console.log(error);
+
+        setMessage(
+          "Could not connect to Google Sheet.",
+          "error"
+        );
+
+        document.getElementById(
+          "saveButton"
+        ).disabled = false;
+      }
     }
 
 
