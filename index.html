@@ -159,6 +159,7 @@
     let scannedLPN = "";
     let scanLocked = false;
 
+
     function setMessage(text, type) {
 
       const message =
@@ -167,6 +168,7 @@
       message.innerText = text;
       message.className = type || "info";
     }
+
 
     function startScanner() {
 
@@ -190,6 +192,7 @@
       );
     }
 
+
     function onScanSuccess(decodedText) {
 
       if (scanLocked) {
@@ -203,13 +206,15 @@
       document.getElementById("lpn").value =
         decodedText;
 
-      document.getElementById("saveButton").disabled =
-        false;
+      document.getElementById(
+        "saveButton"
+      ).disabled = false;
 
       setMessage(
         "LPN captured. Enter quantities.",
         "info"
       );
+
 
       if (scanner) {
 
@@ -220,6 +225,7 @@
         );
       }
 
+
       setTimeout(function() {
 
         document
@@ -229,7 +235,9 @@
       }, 300);
     }
 
+
     function onScanFailure(error) {}
+
 
     function saveData() {
 
@@ -251,6 +259,7 @@
           .value
           .trim();
 
+
       if (!lpn) {
 
         setMessage(
@@ -260,6 +269,7 @@
 
         return;
       }
+
 
       if (systemQty === "") {
 
@@ -271,6 +281,7 @@
         return;
       }
 
+
       if (physicalQty === "") {
 
         setMessage(
@@ -281,17 +292,21 @@
         return;
       }
 
+
       document.getElementById(
         "saveButton"
       ).disabled = true;
+
 
       setMessage(
         "Saving...",
         "info"
       );
 
+
       const callbackName =
         "lpnSaved_" + Date.now();
+
 
       window[callbackName] =
         function(response) {
@@ -311,6 +326,7 @@
             ).className =
               "success";
 
+
             document.getElementById(
               "lpn"
             ).value = "";
@@ -325,15 +341,16 @@
 
             scannedLPN = "";
 
+
             document.getElementById(
               "saveButton"
             ).disabled = true;
 
-            if (script) {
-              script.remove();
-            }
 
             delete window[callbackName];
+
+            script.remove();
+
 
             setTimeout(function() {
 
@@ -345,6 +362,7 @@
 
             }, 300);
 
+
           } else {
 
             setMessage(
@@ -355,8 +373,13 @@
             document.getElementById(
               "saveButton"
             ).disabled = false;
+
+            delete window[callbackName];
+
+            script.remove();
           }
         };
+
 
       const url =
         scriptURL +
@@ -370,30 +393,18 @@
         "&callback=" +
         encodeURIComponent(callbackName);
 
+
       const script =
         document.createElement("script");
+
 
       script.src = url;
       script.async = true;
 
-      script.onerror = function() {
-
-        setMessage(
-          "Could not connect to Google Sheet.",
-          "error"
-        );
-
-        document.getElementById(
-          "saveButton"
-        ).disabled = false;
-
-        delete window[callbackName];
-
-        script.remove();
-      };
 
       document.body.appendChild(script);
     }
+
 
     startScanner();
 
