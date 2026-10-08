@@ -7,7 +7,6 @@
   <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
-
     body {
       font-family: Arial, sans-serif;
       margin: 0;
@@ -70,20 +69,11 @@
       cursor: pointer;
       background: #222;
       color: white;
-      margin-top: 5px;
     }
 
     button:disabled {
       background: #aaa;
       cursor: not-allowed;
-    }
-
-    .auditAgain {
-      background: #b45309;
-    }
-
-    .cancel {
-      background: #777;
     }
 
     #message {
@@ -103,781 +93,452 @@
     .info {
       color: #555;
     }
-
-    #duplicateBox {
-      width: 100%;
-      max-width: 500px;
-      margin: 15px auto;
-      padding: 18px;
-      background: #fff3cd;
-      border: 1px solid #ffc107;
-      border-radius: 12px;
-      box-sizing: border-box;
-      text-align: left;
-    }
-
-    #duplicateBox h3 {
-      text-align: center;
-      margin-top: 0;
-    }
-
-    .previous {
-      background: white;
-      padding: 12px;
-      border-radius: 8px;
-      line-height: 1.8;
-    }
-
-    .hidden {
-      display: none;
-    }
-
   </style>
 </head>
 
 <body>
 
-<h2>📦 LPN Audit</h2>
+  <h2>📦 LPN Audit</h2>
 
-<div id="reader"></div>
+  <div id="reader"></div>
 
+  <div class="box">
 
-<div id="auditBox" class="box">
+    <label for="lpn">LPN</label>
 
-  <label>LPN</label>
+    <input
+      type="text"
+      id="lpn"
+      placeholder="Scan QR code"
+      readonly
+    >
 
-  <input
-    type="text"
-    id="lpn"
-    placeholder="Scan QR code"
-    readonly
-  >
+    <label for="systemQty">System Quantity</label>
 
-  <label>System Quantity</label>
+    <input
+      type="number"
+      id="systemQty"
+      placeholder="Enter system quantity"
+      min="0"
+      step="1"
+      inputmode="numeric"
+    >
 
-  <input
-    type="number"
-    id="systemQty"
-    placeholder="Enter system quantity"
-    min="0"
-    step="1"
-    inputmode="numeric"
-  >
+    <label for="physicalQty">Physical Quantity</label>
 
-  <label>Physical Quantity</label>
+    <input
+      type="number"
+      id="physicalQty"
+      placeholder="Enter physical quantity"
+      min="0"
+      step="1"
+      inputmode="numeric"
+    >
 
-  <input
-    type="number"
-    id="physicalQty"
-    placeholder="Enter physical quantity"
-    min="0"
-    step="1"
-    inputmode="numeric"
-  >
-
-  <button
-    id="saveButton"
-    onclick="saveData()"
-    disabled
-  >
-    SAVE
-  </button>
-
-</div>
-
-
-<div id="duplicateBox" class="hidden">
-
-  <h3>⚠️ DUPLICATE LPN</h3>
-
-  <p>
-    This LPN has already been audited.
-  </p>
-
-  <div class="previous">
-
-    <b>Previous Audit</b>
-    <br><br>
-
-    System Qty:
-    <span id="previousSystem">-</span>
-    <br>
-
-    Physical Qty:
-    <span id="previousPhysical">-</span>
-    <br>
-
-    Difference:
-    <span id="previousDifference">-</span>
-    <br>
-
-    Status:
-    <b id="previousStatus">-</b>
+    <button
+      id="saveButton"
+      type="button"
+      onclick="saveData()"
+      disabled
+    >
+      SAVE
+    </button>
 
   </div>
 
+  <div id="message" class="info">
+    Scan an LPN QR code to begin.
+  </div>
 
-  <button
-    class="auditAgain"
-    onclick="auditAgain()"
-  >
-    AUDIT AGAIN
-  </button>
 
+  <script>
 
-  <button
-    class="cancel"
-    onclick="cancelDuplicate()"
-  >
-    CANCEL
-  </button>
+    // ==================================================
+    // GOOGLE APPS SCRIPT BACKEND
+    // ==================================================
 
-</div>
+    const scriptURL =
+      "https://script.google.com/macros/s/AKfycbyQymQIwRzS01s264FD5AKOQOVmAAwWSb-ER9nhiJUi0YtVzMfAmwGBnYTPjKtw_LH8XQ/exec";
 
 
-<div id="message" class="info">
-  Scan an LPN QR code to begin.
-</div>
+    // ==================================================
+    // GLOBAL VARIABLES
+    // ==================================================
 
+    let scanner = null;
+    let scannedLPN = "";
+    let scanLocked = false;
 
-<script>
 
+    // ==================================================
+    // MESSAGE HELPER
+    // ==================================================
 
-// ==================================================
-// APPS SCRIPT URL
-// ==================================================
+    function setMessage(text, type) {
 
-const scriptURL =
-"https://script.google.com/macros/s/AKfycbyQymQIwRzS01s264FD5AKOQOVmAAwWSb-ER9nhiJUi0YtVzMfAmwGBnYTPjKtw_LH8XQ/exec";
+      const message =
+        document.getElementById("message");
 
+      message.innerText = text;
 
-let scanner = null;
+      message.className = type || "info";
+    }
 
-let scannedLPN = "";
 
-let scanLocked = false;
+    // ==================================================
+    // START QR SCANNER
+    // ==================================================
 
-let jsonpScript = null;
+    function startScanner() {
 
-// Previously audited LPN records loaded from Google Sheet
-let auditedLPNs = {};
+      scanLocked = false;
 
-
-// ==================================================
-// MESSAGE
-// ==================================================
-
-function setMessage(text, type) {
-
-  const message =
-    document.getElementById("message");
-
-  message.innerText = text;
-
-  message.className =
-    type || "info";
-}
-
-
-// ==================================================
-// START SCANNER
-// ==================================================
-
-function startScanner() {
-
-  scanLocked = false;
-
-  scanner =
-    new Html5QrcodeScanner(
-      "reader",
-      {
-        fps: 10,
-        qrbox: {
-          width: 250,
-          height: 250
-        }
-      },
-      false
-    );
-
-  scanner.render(
-    onScanSuccess,
-    function(error) {}
-  );
-}
-
-
-// ==================================================
-// QR SCANNED
-// ==================================================
-
-function onScanSuccess(decodedText) {
-
-  if (scanLocked) {
-    return;
-  }
-
-  scanLocked = true;
-
-  scannedLPN = decodedText;
-
-  document.getElementById("lpn").value =
-    decodedText;
-
-  if (scanner) {
-
-    scanner.clear().catch(
-      function(error) {
-        console.log(error);
-      }
-    );
-
-  }
-
-  // Check the locally loaded audit records.
-  const previous = auditedLPNs[decodedText];
-
-  if (previous) {
-
-    document.getElementById(
-      "previousSystem"
-    ).innerText = previous.systemQty;
-
-    document.getElementById(
-      "previousPhysical"
-    ).innerText = previous.physicalQty;
-
-    document.getElementById(
-      "previousDifference"
-    ).innerText = previous.difference;
-
-    document.getElementById(
-      "previousStatus"
-    ).innerText = previous.status;
-
-    document.getElementById(
-      "duplicateBox"
-    ).classList.remove("hidden");
-
-    document.getElementById(
-      "auditBox"
-    ).classList.add("hidden");
-
-    setMessage(
-      "⚠️ Duplicate LPN detected.",
-      "error"
-    );
-
-    return;
-  }
-
-  document.getElementById(
-    "saveButton"
-  ).disabled = false;
-
-  setMessage(
-    "LPN captured. Enter quantities.",
-    "info"
-  );
-
-  setTimeout(function() {
-
-    document
-      .getElementById("systemQty")
-      .focus();
-
-  }, 300);
-}
-
-
-// ==================================================
-// JSONP REQUEST
-// ==================================================
-
-function sendJSONP(url, callback) {
-
-  const callbackName =
-    "lpnCallback_" + Date.now();
-
-
-  window[callbackName] =
-    function(response) {
-
-      // Remove callback after execution
-      setTimeout(function() {
-
-        delete window[callbackName];
-
-        if (
-          jsonpScript &&
-          jsonpScript.parentNode
-        ) {
-
-          jsonpScript.parentNode
-            .removeChild(jsonpScript);
-
-        }
-
-        jsonpScript = null;
-
-      }, 100);
-
-      callback(response);
-    };
-
-
-  jsonpScript =
-    document.createElement("script");
-
-  jsonpScript.src =
-    url +
-    "&callback=" +
-    encodeURIComponent(callbackName);
-
-  jsonpScript.async = true;
-
-
-  jsonpScript.onerror =
-    function() {
-
-      delete window[callbackName];
-
-      if (
-        jsonpScript &&
-        jsonpScript.parentNode
-      ) {
-
-        jsonpScript.parentNode
-          .removeChild(jsonpScript);
-
-      }
-
-      jsonpScript = null;
-
-      callback(null);
-    };
-
-
-  document.body.appendChild(
-    jsonpScript
-  );
-}
-
-
-// ==================================================
-// SAVE
-// ==================================================
-
-function saveData() {
-
-  const lpn =
-    document
-      .getElementById("lpn")
-      .value
-      .trim();
-
-  const systemQty =
-    document
-      .getElementById("systemQty")
-      .value
-      .trim();
-
-  const physicalQty =
-    document
-      .getElementById("physicalQty")
-      .value
-      .trim();
-
-
-  if (!lpn) {
-
-    setMessage(
-      "Please scan an LPN.",
-      "error"
-    );
-
-    return;
-  }
-
-
-  if (systemQty === "") {
-
-    setMessage(
-      "Please enter System Quantity.",
-      "error"
-    );
-
-    return;
-  }
-
-
-  if (physicalQty === "") {
-
-    setMessage(
-      "Please enter Physical Quantity.",
-      "error"
-    );
-
-    return;
-  }
-
-
-  document.getElementById(
-    "saveButton"
-  ).disabled = true;
-
-
-  setMessage(
-    "Saving...",
-    "info"
-  );
-
-
-  const callbackName =
-    "lpnSaved_" + Date.now();
-
-
-  window[callbackName] =
-    function(response) {
-
-      if (
-        response &&
-        response.success === true
-      ) {
-
-        const system = Number(systemQty);
-        const physical = Number(physicalQty);
-        const difference = physical - system;
-
-        let status;
-
-        if (difference === 0) {
-          status = "MATCH";
-        } else if (difference < 0) {
-          status = "SHORT";
-        } else {
-          status = "EXCESS";
-        }
-
-        // Keep the local duplicate list updated.
-        auditedLPNs[lpn] = {
-          systemQty: system,
-          physicalQty: physical,
-          difference: difference,
-          status: status
-        };
-
-
-        document.getElementById(
-          "message"
-        ).innerText =
-          "✅ Saved! Ready for next LPN.";
-
-        document.getElementById(
-          "message"
-        ).className =
-          "success";
-
-
-        resetFields();
-
-
-        delete window[callbackName];
-
-
-        setTimeout(function() {
-
-          document.getElementById(
-            "reader"
-          ).innerHTML = "";
-
-          startScanner();
-
-        }, 300);
-
-      } else {
-
-        setMessage(
-          "Save failed. Please try again.",
-          "error"
-        );
-
-        document.getElementById(
-          "saveButton"
-        ).disabled = false;
-
-        delete window[callbackName];
-      }
-    };
-
-
-  const url =
-    scriptURL +
-    "?action=save" +
-    "&lpn=" +
-    encodeURIComponent(lpn) +
-    "&systemQty=" +
-    encodeURIComponent(systemQty) +
-    "&physicalQty=" +
-    encodeURIComponent(physicalQty) +
-    "&callback=" +
-    encodeURIComponent(callbackName);
-
-
-  const script =
-    document.createElement("script");
-
-  script.src = url;
-  script.async = true;
-
-
-  script.onerror = function() {
-
-    setMessage(
-      "Could not connect to Google Sheet.",
-      "error"
-    );
-
-    document.getElementById(
-      "saveButton"
-    ).disabled = false;
-
-    delete window[callbackName];
-
-    script.remove();
-  };
-
-
-  document.body.appendChild(script);
-}
-
-
-// ==================================================
-// AUDIT AGAIN
-// ==================================================
-
-function auditAgain() {
-
-  document.getElementById(
-    "duplicateBox"
-  ).classList.add("hidden");
-
-  document.getElementById(
-    "auditBox"
-  ).classList.remove("hidden");
-
-  document.getElementById(
-    "systemQty"
-  ).value = "";
-
-  document.getElementById(
-    "physicalQty"
-  ).value = "";
-
-  document.getElementById(
-    "saveButton"
-  ).disabled = false;
-
-
-  setMessage(
-    "Audit again. Enter the new quantities.",
-    "info"
-  );
-
-
-  document
-    .getElementById("systemQty")
-    .focus();
-}
-
-
-// ==================================================
-// CANCEL DUPLICATE
-// ==================================================
-
-function cancelDuplicate() {
-
-  resetFields();
-
-  document.getElementById(
-    "duplicateBox"
-  ).classList.add("hidden");
-
-  document.getElementById(
-    "auditBox"
-  ).classList.remove("hidden");
-
-
-  setMessage(
-    "Scan the next LPN.",
-    "info"
-  );
-
-
-  document.getElementById(
-    "reader"
-  ).innerHTML = "";
-
-
-  setTimeout(function() {
-
-    startScanner();
-
-  }, 300);
-}
-
-
-// ==================================================
-// RESET FIELDS
-// ==================================================
-
-function resetFields() {
-
-  document.getElementById(
-    "lpn"
-  ).value = "";
-
-  document.getElementById(
-    "systemQty"
-  ).value = "";
-
-  document.getElementById(
-    "physicalQty"
-  ).value = "";
-
-  document.getElementById(
-    "saveButton"
-  ).disabled = true;
-
-  scannedLPN = "";
-
-  scanLocked = false;
-}
-
-
-// ==================================================
-// LOAD PREVIOUS AUDITS
-// ==================================================
-
-function loadPreviousAudits() {
-
-  setMessage(
-    "Loading previous audits...",
-    "info"
-  );
-
-  const callbackName =
-    "lpnList_" + Date.now();
-
-  const listScript =
-    document.createElement("script");
-
-  window[callbackName] =
-    function(response) {
-
-      if (
-        response &&
-        response.success === true &&
-        Array.isArray(response.records)
-      ) {
-
-        auditedLPNs = {};
-
-        response.records.forEach(
-          function(record) {
-
-            if (record.lpn) {
-
-              // If an LPN occurs more than once,
-              // keep the latest record returned.
-              auditedLPNs[record.lpn] = {
-                systemQty: record.systemQty,
-                physicalQty: record.physicalQty,
-                difference: record.difference,
-                status: record.status
-              };
-
-            }
-
+      scanner = new Html5QrcodeScanner(
+        "reader",
+        {
+          fps: 10,
+          qrbox: {
+            width: 250,
+            height: 250
           }
-        );
+        },
+        false
+      );
 
-        setMessage(
-          "Scan an LPN QR code to begin.",
-          "info"
-        );
+      scanner.render(
+        onScanSuccess,
+        onScanFailure
+      );
+    }
 
-      } else {
 
-        setMessage(
-          "Could not load previous audits.",
-          "error"
-        );
+    // ==================================================
+    // QR SCAN SUCCESS
+    // ==================================================
 
+    function onScanSuccess(decodedText) {
+
+      // Prevent repeated scans
+      if (scanLocked) {
+        return;
       }
 
-      delete window[callbackName];
+      scanLocked = true;
 
-      if (
-        listScript &&
-        listScript.parentNode
-      ) {
+      scannedLPN = decodedText;
 
-        listScript.parentNode.removeChild(
-          listScript
-        );
+      // Put LPN into field
+      document.getElementById("lpn").value =
+        decodedText;
 
-      }
-
-    };
-
-
-  listScript.src =
-    scriptURL +
-    "?action=list" +
-    "&callback=" +
-    encodeURIComponent(callbackName);
-
-  listScript.async = true;
-
-
-  listScript.onerror =
-    function() {
+      // Enable save
+      document.getElementById("saveButton").disabled =
+        false;
 
       setMessage(
-        "Scan an LPN QR code to begin.",
+        "LPN captured. Enter quantities.",
         "info"
       );
 
-      delete window[callbackName];
 
-      if (
-        listScript &&
-        listScript.parentNode
-      ) {
+      // Stop scanner
+      if (scanner) {
 
-        listScript.parentNode.removeChild(
-          listScript
-        );
+        scanner.clear()
+          .catch(function(error) {
+            console.log(
+              "Scanner clear error:",
+              error
+            );
+          });
 
       }
 
-    };
+
+      // Focus System Quantity
+      setTimeout(function() {
+
+        document
+          .getElementById("systemQty")
+          .focus();
+
+      }, 300);
+    }
 
 
-  document.body.appendChild(
-    listScript
-  );
-}
+    // ==================================================
+    // QR SCAN FAILURE
+    // ==================================================
+
+    function onScanFailure(error) {
+      // Normal scanning failures are ignored.
+    }
 
 
-// ==================================================
-// START
-// ==================================================
+    // ==================================================
+    // SAVE AUDIT
+    // ==================================================
 
-loadPreviousAudits();
+    function saveData() {
 
-</script>
+      const lpn =
+        document
+          .getElementById("lpn")
+          .value
+          .trim();
+
+      const systemQty =
+        document
+          .getElementById("systemQty")
+          .value
+          .trim();
+
+      const physicalQty =
+        document
+          .getElementById("physicalQty")
+          .value
+          .trim();
+
+
+      // ------------------------------------------
+      // VALIDATION
+      // ------------------------------------------
+
+      if (!lpn) {
+
+        setMessage(
+          "Please scan an LPN.",
+          "error"
+        );
+
+        return;
+      }
+
+
+      if (systemQty === "") {
+
+        setMessage(
+          "Please enter System Quantity.",
+          "error"
+        );
+
+        document
+          .getElementById("systemQty")
+          .focus();
+
+        return;
+      }
+
+
+      if (physicalQty === "") {
+
+        setMessage(
+          "Please enter Physical Quantity.",
+          "error"
+        );
+
+        document
+          .getElementById("physicalQty")
+          .focus();
+
+        return;
+      }
+
+
+      // ------------------------------------------
+      // PREVENT DOUBLE CLICK
+      // ------------------------------------------
+
+      const saveButton =
+        document.getElementById("saveButton");
+
+      saveButton.disabled = true;
+
+      setMessage(
+        "Saving...",
+        "info"
+      );
+
+
+      // ------------------------------------------
+      // CREATE UNIQUE JSONP CALLBACK
+      // ------------------------------------------
+
+      const callbackName =
+        "lpnAuditCallback_" +
+        Date.now();
+
+
+      // ------------------------------------------
+      // CALLBACK FUNCTION
+      // ------------------------------------------
+
+      window[callbackName] =
+        function(response) {
+
+          console.log(
+            "Apps Script response:",
+            response
+          );
+
+
+          if (
+            response &&
+            response.success === true
+          ) {
+
+            setMessage(
+              "✅ Saved! Ready for next LPN.",
+              "success"
+            );
+
+
+            // Clear fields
+            document
+              .getElementById("lpn")
+              .value = "";
+
+            document
+              .getElementById("systemQty")
+              .value = "";
+
+            document
+              .getElementById("physicalQty")
+              .value = "";
+
+
+            scannedLPN = "";
+
+
+            // Remove JSONP request
+            if (jsonpScript) {
+
+              jsonpScript.remove();
+
+              jsonpScript = null;
+            }
+
+
+            // Remove callback
+            delete window[callbackName];
+
+
+            // Restart scanner
+            setTimeout(function() {
+
+              document
+                .getElementById("reader")
+                .innerHTML = "";
+
+              saveButton.disabled = true;
+
+              startScanner();
+
+            }, 300);
+
+
+          } else {
+
+            setMessage(
+              "Google Sheet rejected the save.",
+              "error"
+            );
+
+            saveButton.disabled = false;
+
+            delete window[callbackName];
+
+            if (jsonpScript) {
+
+              jsonpScript.remove();
+
+              jsonpScript = null;
+            }
+          }
+        };
+
+
+      // ------------------------------------------
+      // BUILD REQUEST URL
+      // ------------------------------------------
+
+      const requestURL =
+        scriptURL +
+        "?action=save" +
+        "&lpn=" +
+        encodeURIComponent(lpn) +
+        "&systemQty=" +
+        encodeURIComponent(systemQty) +
+        "&physicalQty=" +
+        encodeURIComponent(physicalQty) +
+        "&callback=" +
+        encodeURIComponent(callbackName);
+
+
+      console.log(
+        "Sending to Apps Script:",
+        requestURL
+      );
+
+
+      // ------------------------------------------
+      // JSONP SCRIPT REQUEST
+      // ------------------------------------------
+
+      var jsonpScript =
+        document.createElement("script");
+
+      jsonpScript.src = requestURL;
+
+      jsonpScript.async = true;
+
+
+      // ------------------------------------------
+      // REQUEST ERROR
+      // ------------------------------------------
+
+      jsonpScript.onerror =
+        function() {
+
+          console.error(
+            "JSONP request failed."
+          );
+
+          setMessage(
+            "❌ Could not connect to Google Sheet.",
+            "error"
+          );
+
+          saveButton.disabled = false;
+
+          delete window[callbackName];
+
+          if (jsonpScript) {
+
+            jsonpScript.remove();
+
+            jsonpScript = null;
+          }
+        };
+
+
+      // ------------------------------------------
+      // SEND REQUEST
+      // ------------------------------------------
+
+      document
+        .body
+        .appendChild(jsonpScript);
+    }
+
+
+    // ==================================================
+    // START APPLICATION
+    // ==================================================
+
+    startScanner();
+
+  </script>
 
 </body>
 </html>
