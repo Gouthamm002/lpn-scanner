@@ -150,29 +150,14 @@
     Scan an LPN QR code to begin.
   </div>
 
-
   <script>
-
-    // ==================================================
-    // GOOGLE APPS SCRIPT BACKEND
-    // ==================================================
 
     const scriptURL =
       "https://script.google.com/macros/s/AKfycbyQymQIwRzS01s264FD5AKOQOVmAAwWSb-ER9nhiJUi0YtVzMfAmwGBnYTPjKtw_LH8XQ/exec";
 
-
-    // ==================================================
-    // GLOBAL VARIABLES
-    // ==================================================
-
     let scanner = null;
     let scannedLPN = "";
     let scanLocked = false;
-
-
-    // ==================================================
-    // MESSAGE HELPER
-    // ==================================================
 
     function setMessage(text, type) {
 
@@ -180,14 +165,8 @@
         document.getElementById("message");
 
       message.innerText = text;
-
       message.className = type || "info";
     }
-
-
-    // ==================================================
-    // START QR SCANNER
-    // ==================================================
 
     function startScanner() {
 
@@ -211,14 +190,8 @@
       );
     }
 
-
-    // ==================================================
-    // QR SCAN SUCCESS
-    // ==================================================
-
     function onScanSuccess(decodedText) {
 
-      // Prevent repeated scans
       if (scanLocked) {
         return;
       }
@@ -227,11 +200,9 @@
 
       scannedLPN = decodedText;
 
-      // Put LPN into field
       document.getElementById("lpn").value =
         decodedText;
 
-      // Enable save
       document.getElementById("saveButton").disabled =
         false;
 
@@ -240,22 +211,15 @@
         "info"
       );
 
-
-      // Stop scanner
       if (scanner) {
 
-        scanner.clear()
-          .catch(function(error) {
-            console.log(
-              "Scanner clear error:",
-              error
-            );
-          });
-
+        scanner.clear().catch(
+          function(error) {
+            console.log(error);
+          }
+        );
       }
 
-
-      // Focus System Quantity
       setTimeout(function() {
 
         document
@@ -265,19 +229,7 @@
       }, 300);
     }
 
-
-    // ==================================================
-    // QR SCAN FAILURE
-    // ==================================================
-
-    function onScanFailure(error) {
-      // Normal scanning failures are ignored.
-    }
-
-
-    // ==================================================
-    // SAVE AUDIT
-    // ==================================================
+    function onScanFailure(error) {}
 
     function saveData() {
 
@@ -299,11 +251,6 @@
           .value
           .trim();
 
-
-      // ------------------------------------------
-      // VALIDATION
-      // ------------------------------------------
-
       if (!lpn) {
 
         setMessage(
@@ -314,7 +261,6 @@
         return;
       }
 
-
       if (systemQty === "") {
 
         setMessage(
@@ -322,13 +268,8 @@
           "error"
         );
 
-        document
-          .getElementById("systemQty")
-          .focus();
-
         return;
       }
-
 
       if (physicalQty === "") {
 
@@ -337,132 +278,87 @@
           "error"
         );
 
-        document
-          .getElementById("physicalQty")
-          .focus();
-
         return;
       }
 
-
-      // ------------------------------------------
-      // PREVENT DOUBLE CLICK
-      // ------------------------------------------
-
-      const saveButton =
-        document.getElementById("saveButton");
-
-      saveButton.disabled = true;
+      document.getElementById(
+        "saveButton"
+      ).disabled = true;
 
       setMessage(
         "Saving...",
         "info"
       );
 
-
-      // ------------------------------------------
-      // CREATE UNIQUE JSONP CALLBACK
-      // ------------------------------------------
-
       const callbackName =
-        "lpnAuditCallback_" +
-        Date.now();
-
-
-      // ------------------------------------------
-      // CALLBACK FUNCTION
-      // ------------------------------------------
+        "lpnSaved_" + Date.now();
 
       window[callbackName] =
         function(response) {
-
-          console.log(
-            "Apps Script response:",
-            response
-          );
-
 
           if (
             response &&
             response.success === true
           ) {
 
-            setMessage(
-              "✅ Saved! Ready for next LPN.",
-              "success"
-            );
+            document.getElementById(
+              "message"
+            ).innerText =
+              "✅ Saved! Ready for next LPN.";
 
+            document.getElementById(
+              "message"
+            ).className =
+              "success";
 
-            // Clear fields
-            document
-              .getElementById("lpn")
-              .value = "";
+            document.getElementById(
+              "lpn"
+            ).value = "";
 
-            document
-              .getElementById("systemQty")
-              .value = "";
+            document.getElementById(
+              "systemQty"
+            ).value = "";
 
-            document
-              .getElementById("physicalQty")
-              .value = "";
-
+            document.getElementById(
+              "physicalQty"
+            ).value = "";
 
             scannedLPN = "";
 
+            document.getElementById(
+              "saveButton"
+            ).disabled = true;
 
-            // Remove JSONP request
-            if (jsonpScript) {
-
-              jsonpScript.remove();
-
-              jsonpScript = null;
+            if (script) {
+              script.remove();
             }
 
-
-            // Remove callback
             delete window[callbackName];
 
-
-            // Restart scanner
             setTimeout(function() {
 
-              document
-                .getElementById("reader")
-                .innerHTML = "";
-
-              saveButton.disabled = true;
+              document.getElementById(
+                "reader"
+              ).innerHTML = "";
 
               startScanner();
 
             }, 300);
 
-
           } else {
 
             setMessage(
-              "Google Sheet rejected the save.",
+              "Save failed. Please try again.",
               "error"
             );
 
-            saveButton.disabled = false;
-
-            delete window[callbackName];
-
-            if (jsonpScript) {
-
-              jsonpScript.remove();
-
-              jsonpScript = null;
-            }
+            document.getElementById(
+              "saveButton"
+            ).disabled = false;
           }
         };
 
-
-      // ------------------------------------------
-      // BUILD REQUEST URL
-      // ------------------------------------------
-
-      const requestURL =
+      const url =
         scriptURL +
         "?action=save" +
         "&lpn=" +
@@ -474,67 +370,30 @@
         "&callback=" +
         encodeURIComponent(callbackName);
 
-
-      console.log(
-        "Sending to Apps Script:",
-        requestURL
-      );
-
-
-      // ------------------------------------------
-      // JSONP SCRIPT REQUEST
-      // ------------------------------------------
-
-      var jsonpScript =
+      const script =
         document.createElement("script");
 
-      jsonpScript.src = requestURL;
+      script.src = url;
+      script.async = true;
 
-      jsonpScript.async = true;
+      script.onerror = function() {
 
+        setMessage(
+          "Could not connect to Google Sheet.",
+          "error"
+        );
 
-      // ------------------------------------------
-      // REQUEST ERROR
-      // ------------------------------------------
+        document.getElementById(
+          "saveButton"
+        ).disabled = false;
 
-      jsonpScript.onerror =
-        function() {
+        delete window[callbackName];
 
-          console.error(
-            "JSONP request failed."
-          );
+        script.remove();
+      };
 
-          setMessage(
-            "❌ Could not connect to Google Sheet.",
-            "error"
-          );
-
-          saveButton.disabled = false;
-
-          delete window[callbackName];
-
-          if (jsonpScript) {
-
-            jsonpScript.remove();
-
-            jsonpScript = null;
-          }
-        };
-
-
-      // ------------------------------------------
-      // SEND REQUEST
-      // ------------------------------------------
-
-      document
-        .body
-        .appendChild(jsonpScript);
+      document.body.appendChild(script);
     }
-
-
-    // ==================================================
-    // START APPLICATION
-    // ==================================================
 
     startScanner();
 
