@@ -807,8 +807,6 @@ function loadPreviousAudits() {
           "info"
         );
 
-        startScanner();
-
       } else {
 
         setMessage(
@@ -847,8 +845,8 @@ function loadPreviousAudits() {
     function() {
 
       setMessage(
-        "Could not load previous audits.",
-        "error"
+        "Scan an LPN QR code to begin.",
+        "info"
       );
 
       delete window[callbackName];
