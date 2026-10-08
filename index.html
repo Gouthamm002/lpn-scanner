@@ -259,6 +259,9 @@ let scanLocked = false;
 
 let jsonpScript = null;
 
+// Previously audited LPN records loaded from Google Sheet
+let auditedLPNs = {};
+
 
 // ==================================================
 // MESSAGE
@@ -321,15 +324,6 @@ function onScanSuccess(decodedText) {
   document.getElementById("lpn").value =
     decodedText;
 
-  document.getElementById("saveButton").disabled =
-    false;
-
-  setMessage(
-    "LPN captured. Enter quantities.",
-    "info"
-  );
-
-
   if (scanner) {
 
     scanner.clear().catch(
@@ -340,6 +334,51 @@ function onScanSuccess(decodedText) {
 
   }
 
+  // Check the locally loaded audit records.
+  const previous = auditedLPNs[decodedText];
+
+  if (previous) {
+
+    document.getElementById(
+      "previousSystem"
+    ).innerText = previous.systemQty;
+
+    document.getElementById(
+      "previousPhysical"
+    ).innerText = previous.physicalQty;
+
+    document.getElementById(
+      "previousDifference"
+    ).innerText = previous.difference;
+
+    document.getElementById(
+      "previousStatus"
+    ).innerText = previous.status;
+
+    document.getElementById(
+      "duplicateBox"
+    ).classList.remove("hidden");
+
+    document.getElementById(
+      "auditBox"
+    ).classList.add("hidden");
+
+    setMessage(
+      "⚠️ Duplicate LPN detected.",
+      "error"
+    );
+
+    return;
+  }
+
+  document.getElementById(
+    "saveButton"
+  ).disabled = false;
+
+  setMessage(
+    "LPN captured. Enter quantities.",
+    "info"
+  );
 
   setTimeout(function() {
 
@@ -489,110 +528,61 @@ function saveData() {
 
 
   setMessage(
-    "Checking and saving...",
+    "Saving...",
     "info"
   );
 
 
-  const url =
-    scriptURL +
-    "?action=save" +
-    "&lpn=" +
-    encodeURIComponent(lpn) +
-    "&systemQty=" +
-    encodeURIComponent(systemQty) +
-    "&physicalQty=" +
-    encodeURIComponent(physicalQty);
+  const callbackName =
+    "lpnSaved_" + Date.now();
 
 
-  sendJSONP(
-    url,
+  window[callbackName] =
     function(response) {
 
-
-      // ------------------------------------------
-      // CONNECTION ERROR
-      // ------------------------------------------
-
-      if (!response) {
-
-        setMessage(
-          "❌ Could not connect to Google Sheet.",
-          "error"
-        );
-
-        document.getElementById(
-          "saveButton"
-        ).disabled = false;
-
-        return;
-      }
-
-
-      // ------------------------------------------
-      // DUPLICATE
-      // ------------------------------------------
-
       if (
-        response.success === true &&
-        response.duplicate === true
+        response &&
+        response.success === true
       ) {
 
+        const system = Number(systemQty);
+        const physical = Number(physicalQty);
+        const difference = physical - system;
+
+        let status;
+
+        if (difference === 0) {
+          status = "MATCH";
+        } else if (difference < 0) {
+          status = "SHORT";
+        } else {
+          status = "EXCESS";
+        }
+
+        // Keep the local duplicate list updated.
+        auditedLPNs[lpn] = {
+          systemQty: system,
+          physicalQty: physical,
+          difference: difference,
+          status: status
+        };
+
+
         document.getElementById(
-          "previousSystem"
+          "message"
         ).innerText =
-          response.previous.systemQty;
+          "✅ Saved! Ready for next LPN.";
 
         document.getElementById(
-          "previousPhysical"
-        ).innerText =
-          response.previous.physicalQty;
+          "message"
+        ).className =
+          "success";
 
-        document.getElementById(
-          "previousDifference"
-        ).innerText =
-          response.previous.difference;
-
-        document.getElementById(
-          "previousStatus"
-        ).innerText =
-          response.previous.status;
-
-
-        document.getElementById(
-          "duplicateBox"
-        ).classList.remove("hidden");
-
-        document.getElementById(
-          "auditBox"
-        ).classList.add("hidden");
-
-
-        setMessage(
-          "⚠️ Duplicate LPN detected.",
-          "error"
-        );
-
-        return;
-      }
-
-
-      // ------------------------------------------
-      // SUCCESSFUL NEW SAVE
-      // ------------------------------------------
-
-      if (
-        response.success === true &&
-        response.duplicate === false
-      ) {
 
         resetFields();
 
 
-        setMessage(
-          "✅ Saved! Ready for next LPN.",
-          "success"
-        );
+        delete window[callbackName];
 
 
         setTimeout(function() {
@@ -605,25 +595,60 @@ function saveData() {
 
         }, 300);
 
-        return;
+      } else {
+
+        setMessage(
+          "Save failed. Please try again.",
+          "error"
+        );
+
+        document.getElementById(
+          "saveButton"
+        ).disabled = false;
+
+        delete window[callbackName];
       }
+    };
 
 
-      // ------------------------------------------
-      // UNKNOWN ERROR
-      // ------------------------------------------
+  const url =
+    scriptURL +
+    "?action=save" +
+    "&lpn=" +
+    encodeURIComponent(lpn) +
+    "&systemQty=" +
+    encodeURIComponent(systemQty) +
+    "&physicalQty=" +
+    encodeURIComponent(physicalQty) +
+    "&callback=" +
+    encodeURIComponent(callbackName);
 
-      setMessage(
-        "❌ Save failed.",
-        "error"
-      );
 
-      document.getElementById(
-        "saveButton"
-      ).disabled = false;
+  const script =
+    document.createElement("script");
 
-    }
-  );
+  script.src = url;
+  script.async = true;
+
+
+  script.onerror = function() {
+
+    setMessage(
+      "Could not connect to Google Sheet.",
+      "error"
+    );
+
+    document.getElementById(
+      "saveButton"
+    ).disabled = false;
+
+    delete window[callbackName];
+
+    script.remove();
+  };
+
+
+  document.body.appendChild(script);
 }
 
 
@@ -640,6 +665,14 @@ function auditAgain() {
   document.getElementById(
     "auditBox"
   ).classList.remove("hidden");
+
+  document.getElementById(
+    "systemQty"
+  ).value = "";
+
+  document.getElementById(
+    "physicalQty"
+  ).value = "";
 
   document.getElementById(
     "saveButton"
@@ -723,10 +756,128 @@ function resetFields() {
 
 
 // ==================================================
+// LOAD PREVIOUS AUDITS
+// ==================================================
+
+function loadPreviousAudits() {
+
+  setMessage(
+    "Loading previous audits...",
+    "info"
+  );
+
+  const callbackName =
+    "lpnList_" + Date.now();
+
+  const listScript =
+    document.createElement("script");
+
+  window[callbackName] =
+    function(response) {
+
+      if (
+        response &&
+        response.success === true &&
+        Array.isArray(response.records)
+      ) {
+
+        auditedLPNs = {};
+
+        response.records.forEach(
+          function(record) {
+
+            if (record.lpn) {
+
+              // If an LPN occurs more than once,
+              // keep the latest record returned.
+              auditedLPNs[record.lpn] = {
+                systemQty: record.systemQty,
+                physicalQty: record.physicalQty,
+                difference: record.difference,
+                status: record.status
+              };
+
+            }
+
+          }
+        );
+
+        setMessage(
+          "Scan an LPN QR code to begin.",
+          "info"
+        );
+
+        startScanner();
+
+      } else {
+
+        setMessage(
+          "Could not load previous audits.",
+          "error"
+        );
+
+      }
+
+      delete window[callbackName];
+
+      if (
+        listScript &&
+        listScript.parentNode
+      ) {
+
+        listScript.parentNode.removeChild(
+          listScript
+        );
+
+      }
+
+    };
+
+
+  listScript.src =
+    scriptURL +
+    "?action=list" +
+    "&callback=" +
+    encodeURIComponent(callbackName);
+
+  listScript.async = true;
+
+
+  listScript.onerror =
+    function() {
+
+      setMessage(
+        "Could not load previous audits.",
+        "error"
+      );
+
+      delete window[callbackName];
+
+      if (
+        listScript &&
+        listScript.parentNode
+      ) {
+
+        listScript.parentNode.removeChild(
+          listScript
+        );
+
+      }
+
+    };
+
+
+  document.body.appendChild(
+    listScript
+  );
+}
+
+
+// ==================================================
 // START
 // ==================================================
 
-startScanner();
+loadPreviousAudits();
 
 </script>
 
