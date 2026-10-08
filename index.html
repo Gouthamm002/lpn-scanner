@@ -7,6 +7,7 @@
   <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
+
     body {
       font-family: Arial, sans-serif;
       margin: 0;
@@ -74,14 +75,15 @@
 
     button:disabled {
       background: #aaa;
+      cursor: not-allowed;
+    }
+
+    .auditAgain {
+      background: #b45309;
     }
 
     .cancel {
       background: #777;
-    }
-
-    .audit-again {
-      background: #b45309;
     }
 
     #message {
@@ -103,6 +105,7 @@
     }
 
     #duplicateBox {
+      width: 100%;
       max-width: 500px;
       margin: 15px auto;
       padding: 18px;
@@ -128,6 +131,7 @@
     .hidden {
       display: none;
     }
+
   </style>
 </head>
 
@@ -136,46 +140,6 @@
 <h2>📦 LPN Audit</h2>
 
 <div id="reader"></div>
-
-<div id="duplicateBox" class="hidden">
-
-  <h3>⚠️ DUPLICATE LPN</h3>
-
-  <p>
-    This LPN has already been audited.
-  </p>
-
-  <div class="previous">
-    <b>Previous Audit</b><br>
-
-    System Qty:
-    <span id="previousSystem">-</span><br>
-
-    Physical Qty:
-    <span id="previousPhysical">-</span><br>
-
-    Difference:
-    <span id="previousDifference">-</span><br>
-
-    Status:
-    <b id="previousStatus">-</b>
-  </div>
-
-  <button
-    class="audit-again"
-    onclick="auditAgain()"
-  >
-    AUDIT AGAIN
-  </button>
-
-  <button
-    class="cancel"
-    onclick="cancelDuplicate()"
-  >
-    CANCEL
-  </button>
-
-</div>
 
 
 <div id="auditBox" class="box">
@@ -222,6 +186,55 @@
 </div>
 
 
+<div id="duplicateBox" class="hidden">
+
+  <h3>⚠️ DUPLICATE LPN</h3>
+
+  <p>
+    This LPN has already been audited.
+  </p>
+
+  <div class="previous">
+
+    <b>Previous Audit</b>
+    <br><br>
+
+    System Qty:
+    <span id="previousSystem">-</span>
+    <br>
+
+    Physical Qty:
+    <span id="previousPhysical">-</span>
+    <br>
+
+    Difference:
+    <span id="previousDifference">-</span>
+    <br>
+
+    Status:
+    <b id="previousStatus">-</b>
+
+  </div>
+
+
+  <button
+    class="auditAgain"
+    onclick="auditAgain()"
+  >
+    AUDIT AGAIN
+  </button>
+
+
+  <button
+    class="cancel"
+    onclick="cancelDuplicate()"
+  >
+    CANCEL
+  </button>
+
+</div>
+
+
 <div id="message" class="info">
   Scan an LPN QR code to begin.
 </div>
@@ -229,31 +242,43 @@
 
 <script>
 
+
+// ==================================================
+// APPS SCRIPT URL
+// ==================================================
+
 const scriptURL =
 "https://script.google.com/macros/s/AKfycbyQymQIwRzS01s264FD5AKOQOVmAAwWSb-ER9nhiJUi0YtVzMfAmwGBnYTPjKtw_LH8XQ/exec";
 
+
 let scanner = null;
+
 let scannedLPN = "";
+
 let scanLocked = false;
 
+let jsonpScript = null;
 
-/* ==========================================
-   MESSAGE
-========================================== */
 
-function message(text, type = "info") {
+// ==================================================
+// MESSAGE
+// ==================================================
 
-  const el =
+function setMessage(text, type) {
+
+  const message =
     document.getElementById("message");
 
-  el.innerText = text;
-  el.className = type;
+  message.innerText = text;
+
+  message.className =
+    type || "info";
 }
 
 
-/* ==========================================
-   START SCANNER
-========================================== */
+// ==================================================
+// START SCANNER
+// ==================================================
 
 function startScanner() {
 
@@ -279,9 +304,9 @@ function startScanner() {
 }
 
 
-/* ==========================================
-   QR SCANNED
-========================================== */
+// ==================================================
+// QR SCANNED
+// ==================================================
 
 function onScanSuccess(decodedText) {
 
@@ -296,10 +321,14 @@ function onScanSuccess(decodedText) {
   document.getElementById("lpn").value =
     decodedText;
 
-  message(
-    "Checking LPN...",
+  document.getElementById("saveButton").disabled =
+    false;
+
+  setMessage(
+    "LPN captured. Enter quantities.",
     "info"
   );
+
 
   if (scanner) {
 
@@ -311,108 +340,203 @@ function onScanSuccess(decodedText) {
 
   }
 
-  checkDuplicate(decodedText);
+
+  setTimeout(function() {
+
+    document
+      .getElementById("systemQty")
+      .focus();
+
+  }, 300);
 }
 
 
-/* ==========================================
-   JSONP REQUEST
-========================================== */
+// ==================================================
+// JSONP REQUEST
+// ==================================================
 
-function jsonp(url, callback) {
+function sendJSONP(url, callback) {
 
   const callbackName =
-    "jsonp_" + Date.now();
+    "lpnCallback_" + Date.now();
+
 
   window[callbackName] =
-    function(data) {
+    function(response) {
 
-      // Give browser time to finish
-      // executing the JSONP callback.
+      // Remove callback after execution
       setTimeout(function() {
 
         delete window[callbackName];
 
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
+        if (
+          jsonpScript &&
+          jsonpScript.parentNode
+        ) {
+
+          jsonpScript.parentNode
+            .removeChild(jsonpScript);
+
         }
+
+        jsonpScript = null;
 
       }, 100);
 
-      callback(data);
+      callback(response);
     };
 
 
-  const script =
+  jsonpScript =
     document.createElement("script");
 
-  script.src =
+  jsonpScript.src =
     url +
     "&callback=" +
     encodeURIComponent(callbackName);
 
-  script.async = true;
+  jsonpScript.async = true;
 
 
-  script.onerror =
+  jsonpScript.onerror =
     function() {
 
       delete window[callbackName];
 
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
+      if (
+        jsonpScript &&
+        jsonpScript.parentNode
+      ) {
+
+        jsonpScript.parentNode
+          .removeChild(jsonpScript);
+
       }
+
+      jsonpScript = null;
 
       callback(null);
     };
 
 
-  document.body.appendChild(script);
+  document.body.appendChild(
+    jsonpScript
+  );
 }
 
 
-/* ==========================================
-   DUPLICATE CHECK
-========================================== */
+// ==================================================
+// SAVE
+// ==================================================
 
-function checkDuplicate(lpn) {
+function saveData() {
+
+  const lpn =
+    document
+      .getElementById("lpn")
+      .value
+      .trim();
+
+  const systemQty =
+    document
+      .getElementById("systemQty")
+      .value
+      .trim();
+
+  const physicalQty =
+    document
+      .getElementById("physicalQty")
+      .value
+      .trim();
+
+
+  if (!lpn) {
+
+    setMessage(
+      "Please scan an LPN.",
+      "error"
+    );
+
+    return;
+  }
+
+
+  if (systemQty === "") {
+
+    setMessage(
+      "Please enter System Quantity.",
+      "error"
+    );
+
+    return;
+  }
+
+
+  if (physicalQty === "") {
+
+    setMessage(
+      "Please enter Physical Quantity.",
+      "error"
+    );
+
+    return;
+  }
+
+
+  document.getElementById(
+    "saveButton"
+  ).disabled = true;
+
+
+  setMessage(
+    "Checking and saving...",
+    "info"
+  );
+
 
   const url =
     scriptURL +
-    "?action=check" +
+    "?action=save" +
     "&lpn=" +
-    encodeURIComponent(lpn);
+    encodeURIComponent(lpn) +
+    "&systemQty=" +
+    encodeURIComponent(systemQty) +
+    "&physicalQty=" +
+    encodeURIComponent(physicalQty);
 
 
-  jsonp(
+  sendJSONP(
     url,
     function(response) {
 
+
+      // ------------------------------------------
+      // CONNECTION ERROR
+      // ------------------------------------------
+
       if (!response) {
 
-        message(
+        setMessage(
           "❌ Could not connect to Google Sheet.",
           "error"
         );
 
-        resetApp();
+        document.getElementById(
+          "saveButton"
+        ).disabled = false;
+
         return;
       }
 
 
-      if (response.success !== true) {
+      // ------------------------------------------
+      // DUPLICATE
+      // ------------------------------------------
 
-        message(
-          "❌ Google Sheet returned an error.",
-          "error"
-        );
-
-        resetApp();
-        return;
-      }
-
-
-      if (response.duplicate === true) {
+      if (
+        response.success === true &&
+        response.duplicate === true
+      ) {
 
         document.getElementById(
           "previousSystem"
@@ -444,60 +568,68 @@ function checkDuplicate(lpn) {
         ).classList.add("hidden");
 
 
-        message(
-          "Duplicate LPN detected.",
+        setMessage(
+          "⚠️ Duplicate LPN detected.",
           "error"
         );
 
-      } else {
-
-        showNewLPN();
-
+        return;
       }
+
+
+      // ------------------------------------------
+      // SUCCESSFUL NEW SAVE
+      // ------------------------------------------
+
+      if (
+        response.success === true &&
+        response.duplicate === false
+      ) {
+
+        resetFields();
+
+
+        setMessage(
+          "✅ Saved! Ready for next LPN.",
+          "success"
+        );
+
+
+        setTimeout(function() {
+
+          document.getElementById(
+            "reader"
+          ).innerHTML = "";
+
+          startScanner();
+
+        }, 300);
+
+        return;
+      }
+
+
+      // ------------------------------------------
+      // UNKNOWN ERROR
+      // ------------------------------------------
+
+      setMessage(
+        "❌ Save failed.",
+        "error"
+      );
+
+      document.getElementById(
+        "saveButton"
+      ).disabled = false;
 
     }
   );
 }
 
 
-/* ==========================================
-   NEW LPN
-========================================== */
-
-function showNewLPN() {
-
-  document.getElementById(
-    "duplicateBox"
-  ).classList.add("hidden");
-
-  document.getElementById(
-    "auditBox"
-  ).classList.remove("hidden");
-
-  document.getElementById(
-    "saveButton"
-  ).disabled = false;
-
-
-  message(
-    "✅ New LPN. Enter quantities.",
-    "success"
-  );
-
-
-  setTimeout(function() {
-
-    document
-      .getElementById("systemQty")
-      .focus();
-
-  }, 300);
-}
-
-
-/* ==========================================
-   AUDIT AGAIN
-========================================== */
+// ==================================================
+// AUDIT AGAIN
+// ==================================================
 
 function auditAgain() {
 
@@ -514,8 +646,8 @@ function auditAgain() {
   ).disabled = false;
 
 
-  message(
-    "Audit again. Enter new quantities.",
+  setMessage(
+    "Audit again. Enter the new quantities.",
     "info"
   );
 
@@ -526,142 +658,45 @@ function auditAgain() {
 }
 
 
-/* ==========================================
-   CANCEL DUPLICATE
-========================================== */
+// ==================================================
+// CANCEL DUPLICATE
+// ==================================================
 
 function cancelDuplicate() {
 
-  resetApp();
+  resetFields();
 
-  message(
+  document.getElementById(
+    "duplicateBox"
+  ).classList.add("hidden");
+
+  document.getElementById(
+    "auditBox"
+  ).classList.remove("hidden");
+
+
+  setMessage(
     "Scan the next LPN.",
     "info"
   );
-}
-
-
-/* ==========================================
-   SAVE
-========================================== */
-
-function saveData() {
-
-  const lpn =
-    document
-      .getElementById("lpn")
-      .value
-      .trim();
-
-  const systemQty =
-    document
-      .getElementById("systemQty")
-      .value
-      .trim();
-
-  const physicalQty =
-    document
-      .getElementById("physicalQty")
-      .value
-      .trim();
-
-
-  if (!lpn) {
-    message(
-      "Please scan an LPN.",
-      "error"
-    );
-    return;
-  }
-
-
-  if (systemQty === "") {
-    message(
-      "Please enter System Quantity.",
-      "error"
-    );
-    return;
-  }
-
-
-  if (physicalQty === "") {
-    message(
-      "Please enter Physical Quantity.",
-      "error"
-    );
-    return;
-  }
 
 
   document.getElementById(
-    "saveButton"
-  ).disabled = true;
+    "reader"
+  ).innerHTML = "";
 
 
-  message(
-    "Saving...",
-    "info"
-  );
+  setTimeout(function() {
 
+    startScanner();
 
-  const url =
-    scriptURL +
-    "?action=save" +
-    "&lpn=" +
-    encodeURIComponent(lpn) +
-    "&systemQty=" +
-    encodeURIComponent(systemQty) +
-    "&physicalQty=" +
-    encodeURIComponent(physicalQty);
-
-
-  jsonp(
-    url,
-    function(response) {
-
-      if (
-        response &&
-        response.success === true
-      ) {
-
-        resetFields();
-
-        message(
-          "✅ Saved! Ready for next LPN.",
-          "success"
-        );
-
-
-        setTimeout(function() {
-
-          document.getElementById(
-            "reader"
-          ).innerHTML = "";
-
-          startScanner();
-
-        }, 300);
-
-      } else {
-
-        message(
-          "❌ Save failed.",
-          "error"
-        );
-
-        document.getElementById(
-          "saveButton"
-        ).disabled = false;
-      }
-
-    }
-  );
+  }, 300);
 }
 
 
-/* ==========================================
-   RESET FIELDS
-========================================== */
+// ==================================================
+// RESET FIELDS
+// ==================================================
 
 function resetFields() {
 
@@ -682,41 +717,14 @@ function resetFields() {
   ).disabled = true;
 
   scannedLPN = "";
+
+  scanLocked = false;
 }
 
 
-/* ==========================================
-   RESET APP
-========================================== */
-
-function resetApp() {
-
-  resetFields();
-
-  document.getElementById(
-    "duplicateBox"
-  ).classList.add("hidden");
-
-  document.getElementById(
-    "auditBox"
-  ).classList.remove("hidden");
-
-  document.getElementById(
-    "reader"
-  ).innerHTML = "";
-
-
-  setTimeout(function() {
-
-    startScanner();
-
-  }, 300);
-}
-
-
-/* ==========================================
-   START
-========================================== */
+// ==================================================
+// START
+// ==================================================
 
 startScanner();
 
